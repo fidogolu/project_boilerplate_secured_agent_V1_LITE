@@ -3,61 +3,50 @@
 
 Calls the LangGraph ReAct agent and streams the response to the user.
 
-Security controls at Gradio layer:
-1. Input validation (message length check via MAX_MESSAGE_LENGTH)
-2. Logging via existing LOGGER (utils/logger.py)
-
-Agent layer security (preserved):
-- LlamaFirewall semantic analysis (check_input_node)
-- llm-guard output sanitization (check_output_node)
-
-Rate limiting handled by Nginx proxy (per IP).
-No API key field — authentication handled by Nginx Basic Auth.
+This module demonstrates:
+1. Input validation (length check)
+2. Structured logging via LOGGER
+3. Async agent invocation pattern
 """
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
-
 import gradio as gr
+from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 
 from agents.graph import graph
 from config.constants import MAX_MESSAGE_LENGTH
 from utils.logger import LOGGER
 
+load_dotenv()
+
 
 async def chat(user_message: str, history: list) -> str:
     """Handle a user message and return the agent's response.
 
-    Security controls at Gradio layer:
-    1. Input validation (length check via MAX_MESSAGE_LENGTH)
-    2. Logging via existing LOGGER (utils/logger.py)
+    Args:
+        user_message: The user's input text.
+        history: Conversation history (list of [user, assistant] pairs).
 
-    Agent layer security (preserved):
-    - LlamaFirewall semantic analysis (check_input_node)
-    - llm-guard output sanitization (check_output_node)
-
-    Rate limiting handled by Nginx proxy (per IP).
+    Returns:
+        The agent's response text.
     """
 
     # ── Input Validation ────────────────────────────────────────────────────
     if not user_message or not user_message.strip():
         return ""
 
-    if len(user_message) > MAX_MESSAGE_LENGTH:
+    max_len = MAX_MESSAGE_LENGTH
+    if len(user_message) > max_len:
         LOGGER.warning(
             "Message too long: %d > %d characters",
             len(user_message),
-            MAX_MESSAGE_LENGTH,
+            max_len,
         )
-        return (
-            f"Error: Message exceeds maximum length of {MAX_MESSAGE_LENGTH} characters"
-        )
+        msg = f"Error: Message exceeds max length of {max_len} characters"
+        return msg
 
     # ── Log Request ─────────────────────────────────────────────────────────
-    LOGGER.info("Gradio message: %.80s", user_message)
+    LOGGER.info("User message received")
 
     try:
         result = await graph.ainvoke(
@@ -76,27 +65,25 @@ async def chat(user_message: str, history: list) -> str:
         return f"Error: {result['error']}"
 
     response = result.get("final_response") or "No response generated."
-    LOGGER.info("Gradio response: %.80s", response[:80] if response else "(empty)")
+    LOGGER.info("Response generated successfully")
 
     return response
 
 
 def create_demo():
-    """Create Gradio demo — no auth field (Nginx Basic Auth handles authentication)."""
-    with gr.Blocks(title="AI Assistant") as demo:
-        gr.Markdown("## AI Assistant")
+    """Create Gradio demo interface."""
+    with gr.Blocks(title="AI Agent Playground") as demo:
+        gr.Markdown("## AI Agent Playground")
         gr.Markdown(
-            "Ask your questions — the assistant can read files, search the web, "
-            "and generate documents."
+            "Ask your questions — interact with an AI agent\n" "powered by LangGraph."
         )
 
-        # No API key field — authentication handled by Nginx Basic Auth
-        chatbot = gr.ChatInterface(
+        _demo = gr.ChatInterface(
             fn=chat,
             examples=[
-                "List files in the root directory",
-                "Search for information about LangGraph on the web",
-                "Write a test document in the 'output' folder",
+                "What is the capital of France?",
+                "Search for information about AI",
+                "Help me understand this concept",
             ],
         )
 
@@ -105,5 +92,5 @@ def create_demo():
 
 demo = create_demo()
 
-# Launch — Indique à Gradio qu'il fonctionne derrière le reverse proxy Nginx
+# Launch the Gradio interface
 demo.launch(server_name="0.0.0.0", server_port=7860)

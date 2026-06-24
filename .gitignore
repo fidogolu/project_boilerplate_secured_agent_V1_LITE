@@ -10,7 +10,6 @@ __pycache__/
 .env
 
 # IDE & Tools
-.continue/
 .vscode/
 .idea/
 
@@ -23,3 +22,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

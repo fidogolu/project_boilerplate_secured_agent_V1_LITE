@@ -1,5 +1,5 @@
 [project]
-name = "secure-agent-boilerplate"
+name = "mcp-agent-boilerplate"
 version = "1.0.0"
 description = "A production-ready boilerplate for building secured AI agents with ReAct loop orchestration via LangGraph."
 readme = "README.md"

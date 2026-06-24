@@ -1,86 +1,104 @@
-# 🛡️ Secure Agent Boilerplate
+# Production-Ready AI Agent Boilerplate
 
-> A production-ready boilerplate for building secured AI agents with ReAct loop orchestration via LangGraph and multi-layer security scanning.
+> A modular, production-grade template for building secured AI agents with ReAct loop orchestration via LangGraph, MCP client integration, and comprehensive security gates.
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Type: typing](https://img.shields.io/badge/typing-Annotated%20%7C%20TypedDict-green.svg)](https://docs.python.org/3/library/typing.html)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
 ---
 
-## 📌 Description
+## 📖 Description
 
-**Secure Agent Boilerplate** is a modular AI agent framework designed as a reusable template for building **production-grade, secure AI applications**. It demonstrates a complete architecture stack including:
+**AI Agent Boilerplate** is a technology-agnostic framework designed as a reusable template for building **production-grade AI agents**. It implements a complete architecture stack including:
 
-- **ReAct Agent Loop** orchestrated by LangGraph with built-in security gates
-- **Multi-layer security scanning** for prompt injection, toxicity, and bias detection
-- **MCP (Model Context Protocol)** integration for external tool calling
-- **Modular architecture** with clear separation of concerns
+- **ReAct Agent Loop** orchestrated by LangGraph with built-in input/output security gates
+- **MCP Client** implementing JSON-RPC 2.0 over HTTP with SSE response parsing
+- **Tool wrappers** bridging LangChain `@tool` decorators to external service endpoints
+- **Modular architecture** with clear separation of concerns across agents, tools, utilities, and configuration layers
+- **Observability** integration for tracing and monitoring
 
-This boilerplate is technology-agnostic and designed to be adapted to any MCP endpoint or external tool-calling service.
+This boilerplate is designed to be adapted to any external service or tool-calling protocol.
 
 ---
 
 ## ✨ Key Features
 
-### Architecture & Patterns
+### Architecture & Design Patterns
 
 | Feature | Description |
 |---------|-------------|
 | **Clean Architecture** | Separation of concerns between agents, tools, utilities, and configuration layers |
 | **ReAct Pattern** | LangGraph-based state machine implementing the Reason-Act loop |
-| **Singleton Pattern** | Thread-safe singleton for LLM worker and MCP client |
-| **Strategy Pattern** | Pluggable security modes (`lite`, `full`, `remote`, `llamafirewall`) |
-| **Context Manager** | Async context manager for MCP client lifecycle |
+| **Singleton Pattern** | Thread-safe singleton for MCP client (`MCP_CLIENT`) |
+| **Async Context Manager** | Proper lifecycle management (`__aenter__`/`__aexit__`) |
+| **State Management** | `TypedDict` + `Annotated` types for LangGraph state with reducers |
 
 ### Security
 
 | Feature | Description |
 |---------|-------------|
-| **Prompt Injection Detection** | LlamaFirewall semantic analysis + llm-guard |
-| **Toxicity/Bias Scanning** | Multi-model output validation |
-| **Input/Output Sanitization** | Automatic sanitization with configurable thresholds |
-| **Configurable Security Modes** | Switch between lite, full, remote, or llamafirewall modes |
+| **Input/Output Sanitization** | `check_input()` and `check_output()` with `SecurityResult` dataclass |
+| **Configurable Security Modes** | Switch between `none`, `lite`, `full`, or `remote` via `SECURITY_MODE` env var |
+| **Security Layer Stub** | Ready-to-replace security module (`utils/security.py`) |
 
 ### Developer Experience
 
 | Feature | Description |
 |---------|-------------|
-| **Strict Types** | Python TypedDict + Annotated types for state management |
-| **Structured Logging** | Production-ready logger with file and console handlers |
+| **Strict Types** | Python `TypedDict` + `Annotated` types for LangGraph state management |
+| **Structured Logging** | Production-ready logger with console and file handlers (`utils/logger.py`) |
 | **Configuration Management** | Single source of truth via `config/constants.py` |
-| **uv Package Management** | Fast, dependency-resolved Python environment |
+| **uv Package Management** | Fast, dependency-resolved Python environment via `pyproject.toml` |
 
 ---
 
-## 🧠 Architecture
+## 🏗️ Architecture & Design Patterns
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     User Interface                          │
-│                  (Gradio Chat Interface)                     │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│              Agent Orchestration                             │
-│           (LangGraph ReAct Loop)                             │
-│  ┌──────────┐  ┌──────┐  ┌─────┐  ┌──────────┐            │
-│  │check_input│→│call_llm│→│tools│→│check_output│           │
-│  └──────────┘  └──────┘  └─────┘  └──────────┘            │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│                  Security Layer                              │
-│   (LlamaFirewall + llm-guard: Injection, Toxicity, Bias)   │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│              MCP Client (HTTP)                               │
-│    ┌────────────┐ ┌─────────────┐ ┌──────────────┐         │
-│    │/endpoint-a │ │/endpoint-b  │ │/endpoint-c    │         │
-│    └────────────┘ └─────────────┘ └──────────────┘         │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────┐
-│            MCP Endpoints (Remote)                            │
-│              mcp.example.com                                 │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph UI["User Interface"]
+        Gradio["Gradio ChatInterface<br/>port 7860"]
+    end
+
+    subgraph Agent["Agent Orchestration LangGraph StateGraph"]
+        CI["check_input Security Gate In"]
+        LLM["call_llm LLM Tool Binding"]
+        Tools["ToolNode LangChain"]
+        CO["check_output Security Gate Out"]
+    end
+
+    subgraph ToolsLayer["Tools Layer"]
+        T1["execute_query"]
+        T2["fetch_resource"]
+    end
+
+    subgraph Client["MCP Client Singleton"]
+        HTTP["httpx.AsyncClient JSON-RPC 2.0"]
+    end
+
+    subgraph External["External Services"]
+        S1["tool_execute"]
+        S2["tool_fetch"]
+    end
+
+    subgraph LLMSvc["LLM Service"]
+        Model["ChatOpenAI OpenAI-compatible"]
+    end
+
+    UI -->|"user_message"| CI
+    CI --> LLM
+    LLM -->|"tool_calls"| Tools
+    Tools -->|"results"| LLM
+    LLM -->|"final"| CO
+    CO -->|"response"| UI
+
+    Tools --> HTTP
+    HTTP --> S1
+    HTTP --> S2
+
+    LLM --> Model
+    Model -.|"response"| LLM
 ```
 
 ### Technical Stack
@@ -88,73 +106,71 @@ This boilerplate is technology-agnostic and designed to be adapted to any MCP en
 | Category | Technology |
 |----------|-----------|
 | **Agent Framework** | LangGraph, LangChain |
-| **MCP Protocol** | httpx (async, HTTP/2) |
-| **Security** | LlamaFirewall, llm-guard |
-| **LLM Inference** | llama.cpp (OpenAI-compatible API) |
-| **GPU Acceleration** | PyTorch (CUDA 12.8+), torchvision |
-| **UI** | Gradio |
-| **Observability** | Langfuse |
-| **Configuration** | python-dotenv, uv |
+| **Protocol** | httpx async, JSON-RPC 2.0 over HTTP |
+| **LLM Backend** | ChatOpenAI OpenAI-compatible API |
+| **UI** | Gradio ChatInterface |
+| **Observability** | Langfuse configurable |
+| **Package Manager** | uv |
 
 ---
 
-## 📁 Project Structure
+## 🚀 How to Use
+
+### Prerequisites
+
+- Python 3.10 – 3.13
+- [uv](https://github.com/astral-sh/uv) — Python package manager: `pip install uv`
+
+### Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/<your-username>/mcp-agent-boilerplate.git
+cd mcp-agent-boilerplate
+
+# 2. Create a virtual environment and install dependencies
+uv sync
+
+# 3. Configure environment variables
+cp .env.example .env
+# Edit .env with your LLM endpoint, service URLs, and security settings
+
+# 4. Run the agent
+uv run python main.py
+```
+
+The Gradio interface will be available at `http://localhost:7860`.
+
+### Project Structure
 
 ```
-secure-agent-boilerplate/
-├── main.py                    # Entry point (Gradio UI + agent logic)
+mcp-agent-boilerplate/
+├── main.py                    # Entry point Gradio UI + agent invocation
 ├── pyproject.toml             # Dependencies & uv configuration
-├── .env.example               # Template configuration
+├── .env.example               # Environment variable template
 ├── README.md                  # This file
 ├── LICENSE.md                 # MIT License
 │
 ├── agents/                    # Agent core components
-│   ├── graph.py               # LangGraph ReAct loop definition
+│   ├── graph.py               # LangGraph StateGraph ReAct loop
 │   ├── state.py               # AgentState TypedDict
 │   └── tools.py               # MCP tool wrappers
 │
 ├── config/                    # Configuration layer
-│   └── constants.py           # Single source of truth
+│   └── constants.py           # Single source of truth env vars
 │
 ├── utils/                     # Utility modules
 │   ├── llm.py                 # LLM worker singleton
 │   ├── logger.py              # Logging configuration
-│   ├── mcp_client.py          # Async HTTP client
-│   └── security.py            # Security scanners
+│   ├── mcp_client.py          # Async HTTP client JSON-RPC over HTTP
+│   ├── security.py            # Security scanners SecurityResult
+│   └── preprocessing.py       # Text preprocessing utilities
 │
 ├── tests/                     # Test suite
-│   └── test_security.py
+│   └── test_security.py       # Security layer unit tests
 │
 └── docs/
-    ├── architecture.mermaid   # Architecture diagram
-    └── README_CODE.md         # Technical documentation
-```
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- uv (Python package manager): `pip install uv`
-
-### Local Development
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/secure-agent-boilerplate.git
-cd secure-agent-boilerplate
-
-# 2. Create a virtual environment with uv
-uv sync
-
-# 3. Copy and configure environment variables
-cp .env.example .env
-# Edit .env with your LLM endpoint, MCP URLs, and security settings
-
-# 4. Run the agent
-uv run python main.py
+    └── architecture.mermaid   # Architecture diagram
 ```
 
 ---
@@ -165,16 +181,16 @@ uv run python main.py
 # Run all tests
 uv run pytest
 
-# Run with verbose output
+# Verbose output
 uv run pytest -v
 
-# Run security tests only
+# Security tests only
 uv run pytest tests/test_security.py -v
 ```
 
 ---
 
-## 📝 Configuration
+## ⚙️ Configuration
 
 All configuration is managed through environment variables. See [`.env.example`](.env.example) for the full list.
 
@@ -182,79 +198,85 @@ All configuration is managed through environment variables. See [`.env.example`]
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `WORKER_LLM_URL` | LLM API endpoint | `http://localhost:10001/v1` |
-| `WORKER_MODEL_NAME` | Model to use | `llm-model-name` |
-| `MCP_BASE_URL` | MCP endpoint base URL | `https://mcp.example.com` |
-| `SECURITY_MODE` | Security scanning mode | `llamafirewall` |
+| `WORKER_LLM_URL` | LLM API endpoint | `http://localhost:8000/v1` |
+| `WORKER_MODEL_NAME` | Model to use | `your-model-name` |
+| `MCP_BASE_URL` | External service base URL | `http://localhost:8080` |
+| `SECURITY_MODE` | Security scanning mode | `lite` |
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
+| `MAX_MESSAGE_LENGTH` | Max input message length | `4096` |
 
 ### Security Modes
 
 | Mode | Description | Use Case |
 |------|-------------|----------|
-| `lite` | Basic scanners, no GPU required | Development |
-| `full` | All scanners + GPU models | Production (single-host) |
-| `remote` | HTTP call to security service | Production (multi-host) |
-| `llamafirewall` | Semantic analysis + llm-guard | **Recommended** |
+| `none` | No security checks | Local development |
+| `lite` | Basic sanitization, no GPU | Development |
+| `full` | All scanners + GPU models | Production single-host |
+| `remote` | HTTP call to security service | Production multi-host |
 
 ---
 
-## 🏗️ Architecture Deep Dive
+## 🛠️ Extending the Boilerplate
 
-### ReAct Loop
-
-The agent follows the **ReAct (Reason + Act)** pattern:
-
-```
-User Input → [Security Check] → LLM Call → Tool Execution? → [Security Check] → Response
-                    ↓                    ↓                    ↓                  ↓
-              Input validation     Tool selection      Output sanitization    Final answer
-```
-
-Each node in the graph is independently testable and the security gates are applied at both input and output boundaries.
-
-### Security Strategy
-
-The security layer follows a **defense-in-depth** approach:
-
-1. **Layer 1 — Input Validation**: Message length limits, format validation
-2. **Layer 2 — Semantic Analysis**: LlamaFirewall detects prompt injection attempts
-3. **Layer 3 — Token-level Scanning**: llm-guard checks for toxicity, bias, sensitive data
-4. **Layer 4 — Output Sanitization**: All LLM outputs are scanned before delivery
-
-### MCP Client
-
-The MCP client provides a clean abstraction over HTTP-based MCP endpoints:
+### Adding a New Tool
 
 ```python
-from utils.mcp_client import MCP_CLIENT
+# agents/tools.py
+@tool
+async def my_custom_tool(param: str) -> str:
+    """Describe your tool's purpose."""
+    safe = check_input(param)
+    if safe.is_blocked:
+        return _block_error(safe.reason)
+    try:
+        client = await MCP_CLIENT.get_client()
+        result = await client.my_custom_method(safe.sanitized_text)
+        safe_out = check_output(result)
+        if safe_out.is_blocked:
+            return _block_error(safe_out.reason)
+        return safe_out.sanitized_text
+    except Exception as e:
+        LOGGER.error("my_custom_tool failed", exc_info=True)
+        return f"Error: {e}"
 
-# Use as context manager
-async with MCP_CLIENT as client:
-    content = await client.file_read("document.txt")
+# Register in TOOLS list
+TOOLS = [my_custom_tool, ...]
+```
 
-# Or use the singleton
-result = await MCP_CLIENT.file_read("document.txt")
+### Replacing the Security Layer
+
+Replace `utils/security.py` with your own implementation. The interface is:
+
+```python
+@dataclass
+class SecurityResult:
+    is_blocked: bool
+    reason: str = ""
+    sanitized_text: str = ""
+
+def check_input(text: str, source: str = "unknown") -> SecurityResult:
+    ...
+
+def check_output(text: str, prompt: str = "", source: str = "unknown") -> SecurityResult:
+    ...
 ```
 
 ---
 
 ## 📄 License
 
-MIT License — see [`LICENSE.md`](LICENSE.md)
+This project is licensed under the [MIT License](LICENSE.md).
 
 ---
 
 ## 🤝 Contributing
 
-This is a boilerplate template. Feel free to fork, adapt, and use as a starting point for your own secure AI agent projects.
-
-### When forking, consider:
-
-- Updating the `.env.example` with your own defaults
-- Adapting tool wrappers to your MCP endpoints
-- Adding your own security scanners
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
-*Built with LangGraph, httpx, and Gradio. Designed for production.*
+**Built with** ⚡ by [Your Name](https://github.com/your-username)

@@ -1,12 +1,15 @@
-# agent/graph.py
+# agents/graph.py
 """ReAct agent — LangGraph graph definition.
 
 Architecture:
-    user_message → [check_input] → call_llm → [tool_node] → call_llm → ... → [check_output] → response
+    user_message -> [security_check_in] -> call_llm -> [tool_execution]
+    -> call_llm -> ... -> [security_check_out] -> response
 
-Conditional edges:
-    call_llm → tools      if the LLM requested a tool call
-    call_llm → end_node   if the LLM produced a final answer
+This module demonstrates:
+- StateGraph-based ReAct loop orchestration
+- Conditional routing based on LLM tool calls
+- Input/output security gates
+- Error propagation through agent state
 """
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -19,10 +22,8 @@ from utils.llm import WORKER_LLM
 from utils.logger import LOGGER
 from utils.security import check_input, check_output
 
-_SYSTEM_PROMPT = """You are a helpful assistant with access to tools that can:
-- Read, search, and manage files in a file system (read_file, list_directory, search_files)
-- Search the web and fetch web pages (search_web, fetch_url)
-- Write and manage text files (write_file, create_directory, rename_file)
+# System prompt — customize for your specific use case
+_SYSTEM_PROMPT = """You are a helpful assistant with access to external tools.
 
 Use the appropriate tools to answer the user's request.
 Always think step by step before calling a tool.
@@ -33,26 +34,24 @@ When you have enough information, provide a clear and concise final answer.
 _llm_with_tools = WORKER_LLM.bind_tools(TOOLS)
 
 
-# ── Nodes ─────────────────────────────────────────────────────────────────────
+# ── Nodes ────────────────────────────────────────────────────────────────────
 
 
 async def check_input_node(state: AgentState) -> dict:
-    """Apply security check on the latest user message."""
+    """Apply security validation on the latest user message."""
     if state.get("error"):
         return {}
 
-    last_message = state["messages"][-1]
-    text = (
-        last_message.content if hasattr(last_message, "content") else str(last_message)
-    )
+    last_msg = state["messages"][-1]
+    if hasattr(last_msg, "content"):
+        text = last_msg.content
+    else:
+        text = str(last_msg)
 
     safe = check_input(text)
     if safe.is_blocked:
-        LOGGER.warning("check_input_node blocked: %s", safe.reason)
-        return {"error": f"Input blocked by security policy: {safe.reason}"}
-
-    # Replace last message content with sanitized version
-    from langchain_core.messages import HumanMessage
+        LOGGER.warning("Input blocked: %s", safe.reason)
+        return {"error": f"Input blocked: {safe.reason}"}
 
     return {"messages": [HumanMessage(content=safe.sanitized_text)]}
 
@@ -66,45 +65,45 @@ async def call_llm(state: AgentState) -> dict:
 
     try:
         response = await _llm_with_tools.ainvoke(messages)
-        LOGGER.debug(
-            "call_llm: tool_calls=%d", len(getattr(response, "tool_calls", []) or [])
-        )
+        tool_calls = getattr(response, "tool_calls", []) or []
+        LOGGER.debug("LLM response: tool_calls=%d", len(tool_calls))
         return {"messages": [response]}
     except Exception as e:
-        LOGGER.error("call_llm failed", exc_info=True)
+        LOGGER.error("LLM call failed", exc_info=True)
         return {"error": str(e)}
 
 
 async def check_output_node(state: AgentState) -> dict:
-    """Apply security check on the LLM final response and extract it."""
+    """Apply security validation on the LLM final response."""
     if state.get("error"):
         return {}
 
-    last_message = state["messages"][-1]
-    text = (
-        last_message.content if hasattr(last_message, "content") else str(last_message)
-    )
+    last_msg = state["messages"][-1]
+    if hasattr(last_msg, "content"):
+        text = last_msg.content
+    else:
+        text = str(last_msg)
 
     safe = check_output(text)
     if safe.is_blocked:
-        LOGGER.warning("check_output_node blocked: %s", safe.reason)
-        return {"error": f"Output blocked by security policy: {safe.reason}"}
+        LOGGER.warning("Output blocked: %s", safe.reason)
+        return {"error": f"Output blocked: {safe.reason}"}
 
     return {"final_response": safe.sanitized_text}
 
 
-# ── Conditional edge ──────────────────────────────────────────────────────────
+# ── Conditional edge ─────────────────────────────────────────────────────────
 
 
 def should_use_tools(state: AgentState) -> str:
     """Route to tools if the LLM made tool calls, otherwise finalize."""
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+    last_msg = state["messages"][-1]
+    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
         return "tools"
     return END
 
 
-# ── Build graph ───────────────────────────────────────────────────────────────
+# ── Build graph ──────────────────────────────────────────────────────────────
 
 workflow = StateGraph(AgentState)
 

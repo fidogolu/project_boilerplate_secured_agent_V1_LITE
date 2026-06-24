@@ -121,7 +121,6 @@ def test_check_output_sanitized_text_is_str(security_mode):
 
 def test_check_input_blocked_reason_is_str(security_mode):
     """When blocked, reason must be a non-empty string."""
-    # This test may pass or fail depending on security mode
     result = check_input("")
     if result.is_blocked:
         assert isinstance(result.reason, str)
