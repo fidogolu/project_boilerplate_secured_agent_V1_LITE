@@ -1,50 +1,62 @@
 graph TD
     subgraph UserInterface["User Interface"]
-        Gradio["Gradio Chat Interface"]
+        Gradio["Gradio ChatInterface<br/>(server: 0.0.0.0:7860)"]
     end
 
-    subgraph AgentLayer["Agent Orchestration (LangGraph ReAct Loop)"]
-        CheckInput["check_input<br/>(Input Security)"]
-        CallLLM["call_llm<br/>(LLM Inference + Tools)"]
-        ToolNode["ToolNode<br/>(Tool Execution)"]
-        CheckOutput["check_output<br/>(Output Security)"]
+    subgraph AgentLayer["Agent Orchestration (LangGraph StateGraph)"]
+        CheckInput["check_input_node<br/>(Input Security Gate)"]
+        CallLLM["call_llm<br/>(LLM Inference + Tool Binding)"]
+        ToolNode["ToolNode<br/>(LangChain ToolNode)"]
+        CheckOutput["check_output_node<br/>(Output Security Gate)"]
     end
 
-    subgraph MCPClient["MCP Client"]
-        MCP_Client["HTTP Client<br/>(httpx, plain HTTP)"]
+    subgraph ToolsLayer["Tools Layer"]
+        ExecuteQuery["execute_query"]
+        FetchResource["fetch_resource"]
     end
 
-    subgraph MCPEndpoints["MCP Endpoints"]
-        EndpointA["file_read"]
-        EndpointB["file_list"]
-        EndpointC["web_search"]
-        EndpointD["write_file"]
+    subgraph MCPClient["MCP Client (Singleton)"]
+        MCP_Client["httpx.AsyncClient<br/>(JSON-RPC 2.0, SSE)"]
+    end
+
+    subgraph ExternalServices["External Services"]
+        EndpointQuery["tool_execute"]
+        EndpointFetch["tool_fetch"]
     end
 
     subgraph LLM["LLM Server"]
-        LLM_Server["LLM API<br/>(OpenAI-compatible)"]
+        LLM_Server["ChatOpenAI<br/>(OpenAI-compatible API)"]
     end
 
-    Gradio --> CheckInput
+    %% Main flow
+    Gradio -->|"user_message"| CheckInput
     CheckInput --> CallLLM
-    CallLLM --> ToolNode
+    CallLLM -->|"has tool_calls"| ToolNode
+    ToolNode -->|"results"| CallLLM
+    CallLLM -->|"no tool_calls"| CheckOutput
+    CheckOutput -->|"final_response"| Gradio
+
+    %% Tool to MCP Client
     ToolNode --> MCP_Client
-    MCP_Client --> EndpointA
-    MCP_Client --> EndpointB
-    MCP_Client --> EndpointC
-    MCP_Client --> EndpointD
+    MCP_Client --> EndpointQuery
+    MCP_Client --> EndpointFetch
 
+    %% LLM
     CallLLM --> LLM_Server
-    LLM_Server -.-> CallLLM
+    LLM_Server -.->|"response"| CallLLM
 
-    ToolNode --> CallLLM
-    CallLLM --> CheckOutput
-    CheckOutput --> Gradio
+    %% Security layer
+    CheckInput -.->|"check_input"| SecurityIn["Security: SecurityResult"]
+    CheckOutput -.->|"check_output"| SecurityOut["Security: SecurityResult"]
 
+    %% Styles
     classDef default fill:#fff,stroke:#333,stroke-width:2px
     classDef layer fill:#e8f4f8,stroke:#2196F3
     classDef security fill:#fff3e0,stroke:#FF9800
     classDef infra fill:#e8f5e9,stroke:#4CAF50
+    classDef tools fill:#f3e5f5,stroke:#9C27B0
 
     class UserInterface,AgentLayer layer
-    class MCPClient,MCPEndpoints,LLM infra
+    class MCPClient,ExternalServices,LLM infra
+    class SecurityIn,SecurityOut security
+    class ToolsLayer tools
